@@ -1,0 +1,791 @@
+// ============================================================
+// Makers - YOLO Object Detection (Slint UI)
+// Pure UI. All logic lives in yolo_detection_slint.py
+// ============================================================
+import { ScrollView } from "std-widgets.slint";
+
+export struct ClassCount {
+    name: string,
+    count: int,
+    cidx: int,   // color index into Theme.palette (same order as the Python palette)
+}
+
+global Theme {
+    out property <color> bg: #090c15;
+    out property <color> panel: #11162a;
+    out property <color> card: #1a2038;
+    out property <color> card-hi: #262d4f;
+    out property <color> border: #272e4d;
+    out property <color> track: #2a3152;
+    out property <color> text: #eef1fb;
+    out property <color> dim: #8a93b5;
+    out property <color> accent: #6366f1;
+    out property <color> cyan: #22d3ee;
+    out property <color> green: #34d399;
+    out property <color> amber: #fbbf24;
+    out property <color> red: #f87171;
+    out property <color> pink: #f472b6;
+
+    out property <brush> brand: @linear-gradient(90deg, #6366f1 0%, #22d3ee 100%);
+    out property <brush> warm: @linear-gradient(90deg, #ec4899 0%, #fb923c 100%);
+    out property <brush> go: @linear-gradient(90deg, #059669 0%, #34d399 100%);
+    out property <brush> danger: @linear-gradient(90deg, #dc2626 0%, #f87171 100%);
+
+    // Vector icons (24x24 viewbox, stroke style)
+    out property <string> icon-image: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M7.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0 M21 15l-5-5L5 21";
+    out property <string> icon-video: "M3 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z M16 10l6-3.5v11L16 14z";
+    out property <string> icon-webcam: "M4 10a8 8 0 1 0 16 0a8 8 0 1 0-16 0 M9 10a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M12 18v3 M8 21h8";
+    out property <string> icon-folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z";
+
+    // Keep in sync with PALETTE_HEX in the Python file
+    out property <[color]> palette: [
+        #6366f1, #22d3ee, #34d399, #fbbf24, #f472b6, #fb923c,
+        #a78bfa, #60a5fa, #f87171, #2dd4bf, #a3e635, #e879f9,
+    ];
+}
+
+component Card inherits Rectangle {
+    background: Theme.panel;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Theme.border;
+}
+
+component SectionLabel inherits Text {
+    color: Theme.dim;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <brush> fill: Theme.brand;
+    callback clicked();
+
+    height: 38px;
+    border-radius: 10px;
+    background: root.fill;
+    opacity: root.enabled ? 1.0 : 0.35;
+
+    Rectangle {
+        border-radius: 10px;
+        background: #ffffff;
+        opacity: (ta.has-hover && root.enabled) ? 0.14 : 0.0;
+    }
+
+    Text {
+        text: root.text;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component NavButton inherits Rectangle {
+    in property <string> icon_path;
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+
+    height: 44px;
+    border-radius: 10px;
+    background: root.active ? #6366f133 : (ta.has-hover ? Theme.card : transparent);
+    border-width: root.active ? 1px : 0px;
+    border-color: Theme.accent;
+
+    Rectangle {
+        x: 0px;
+        y: (parent.height - 22px) / 2;
+        width: 3px;
+        height: 22px;
+        border-radius: 2px;
+        background: Theme.brand;
+        visible: root.active;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        spacing: 12px;
+        alignment: start;
+        Rectangle {
+            width: 22px;
+            Path {
+                width: 20px;
+                height: 20px;
+                y: (parent.height - self.height) / 2;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: root.icon_path;
+                stroke: root.active ? Theme.cyan : Theme.dim;
+                stroke-width: 2px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                fill: transparent;
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text : Theme.dim;
+            font-size: 14px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component FancySlider inherits Rectangle {
+    in-out property <float> value: 0.3;
+    in property <float> minimum: 0.05;
+    in property <float> maximum: 0.95;
+    in property <brush> fill: Theme.brand;
+    callback changed(float);
+
+    height: 24px;
+    property <float> frac: (root.value - root.minimum) / (root.maximum - root.minimum);
+
+    Rectangle {
+        x: 0px;
+        y: (parent.height - 6px) / 2;
+        width: parent.width;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.track;
+
+        Rectangle {
+            x: 0px;
+            width: 9px + (root.width - 18px) * root.frac;
+            height: parent.height;
+            border-radius: 3px;
+            background: root.fill;
+        }
+    }
+
+    Rectangle {
+        x: (root.width - self.width) * root.frac;
+        y: (root.height - self.height) / 2;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: #ffffff;
+        border-width: 3px;
+        border-color: Theme.accent;
+    }
+
+    TouchArea {
+        function set-from-mouse() {
+            root.value = Math.min(root.maximum, Math.max(root.minimum,
+                root.minimum + (self.mouse-x - 9px) / (root.width - 18px) * (root.maximum - root.minimum)));
+            root.changed(root.value);
+        }
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                self.set-from-mouse();
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                self.set-from-mouse();
+            }
+        }
+    }
+}
+
+component ClassRow inherits Rectangle {
+    in property <string> name;
+    in property <int> count;
+    in property <int> total;
+    in property <color> tint;
+
+    height: 46px;
+    border-radius: 10px;
+    background: Theme.card;
+
+    // proportional bar
+    Rectangle {
+        x: 0px;
+        y: parent.height - 3px;
+        width: parent.width * (root.count / Math.max(1, root.total));
+        height: 3px;
+        background: root.tint;
+        opacity: 0.85;
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 12px;
+        spacing: 10px;
+
+        Rectangle {
+            width: 12px;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: root.tint;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+        Text {
+            text: root.name;
+            color: Theme.text;
+            font-size: 13px;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Rectangle {
+            width: 44px;
+            Rectangle {
+                width: parent.width;
+                height: 24px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 12px;
+                background: root.tint;
+                Text {
+                    text: root.count;
+                    color: #0b0e1a;
+                    font-size: 12px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "YOLO Object Detection - Slint (ONNX)";
+    preferred-width: 1400px;
+    preferred-height: 860px;
+    min-width: 1100px;
+    min-height: 700px;
+    background: Theme.bg;
+
+    // ---- state pushed from Python ----
+    in-out property <string> mode: "image";
+    in property <string> model_name: "No model loaded";
+    in property <bool> model_ok: false;
+    in property <string> provider_text: "";
+    in property <string> file_name: "";
+    in property <bool> busy: false;
+    in property <bool> paused: false;
+    in property <bool> has_image: false;
+    in property <image> frame;
+    in property <bool> show_fps: false;
+    in property <string> fps_text: "";
+    in property <string> status_text: "Ready";
+    in property <int> status_kind: 0;          // 0 info, 1 success, 2 warning, 3 error
+    in property <int> total: 0;
+    in property <string> total_caption: "Objects Detected";
+    in property <string> results_hint: "No detections yet";
+    in property <[ClassCount]> classes;
+    in property <bool> can_save: false;
+    in property <bool> can_shuffle: false;
+    in property <bool> can_swap: false;
+    in-out property <float> conf: 0.30;
+    in-out property <float> iou: 0.30;
+
+    // ---- callbacks handled in Python ----
+    callback select_mode(string);
+    callback change_model();
+    callback reload_model();
+    callback primary_action();
+    callback shuffle();
+    callback swap_cam();
+    callback toggle_pause();
+    callback stop();
+    callback clear();
+    callback save_result();
+    callback capture();
+    callback conf_changed(float);
+    callback iou_changed(float);
+
+    property <bool> is_stream: root.mode == "video" || root.mode == "webcam";
+
+    HorizontalLayout {
+        // ===================== SIDEBAR =====================
+        Rectangle {
+            width: 272px;
+            background: Theme.panel;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 14px;
+
+                // brand
+                HorizontalLayout {
+                    spacing: 12px;
+                    Rectangle {
+                        width: 42px;
+                        height: 42px;
+                        border-radius: 12px;
+                        background: Theme.brand;
+                        Text {
+                            text: "M";
+                            color: #ffffff;
+                            font-size: 22px;
+                            font-weight: 800;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Makers"; color: Theme.text; font-size: 20px; font-weight: 800; }
+                        Text { text: "YOLO Object Detection"; color: Theme.dim; font-size: 11px; }
+                    }
+                }
+
+                Rectangle { height: 2px; }
+                SectionLabel { text: "MODEL"; }
+
+                Card {
+                    background: Theme.card;
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+                        Text { text: "Current model"; color: Theme.dim; font-size: 11px; }
+                        Text {
+                            text: root.model_name;
+                            color: root.model_ok ? Theme.green : Theme.red;
+                            font-size: 13px;
+                            font-weight: 700;
+                            wrap: word-wrap;
+                        }
+                        ActionButton {
+                            text: "Change Model";
+                            fill: Theme.card-hi;
+                            enabled: !root.busy;
+                            clicked => { root.change_model(); }
+                        }
+                        ActionButton {
+                            text: "Reload";
+                            fill: Theme.card-hi;
+                            enabled: !root.busy;
+                            clicked => { root.reload_model(); }
+                        }
+                    }
+                }
+
+                SectionLabel { text: "MODE"; }
+
+                NavButton {
+                    icon_path: Theme.icon-image; label: "Image"; active: root.mode == "image";
+                    clicked => { root.select_mode("image"); }
+                }
+                NavButton {
+                    icon_path: Theme.icon-video; label: "Video"; active: root.mode == "video";
+                    clicked => { root.select_mode("video"); }
+                }
+                NavButton {
+                    icon_path: Theme.icon-webcam; label: "Webcam"; active: root.mode == "webcam";
+                    clicked => { root.select_mode("webcam"); }
+                }
+                NavButton {
+                    icon_path: Theme.icon-folder; label: "Folder"; active: root.mode == "folder";
+                    clicked => { root.select_mode("folder"); }
+                }
+
+                Rectangle { height: 2px; }
+                SectionLabel { text: "DETECTION SETTINGS"; }
+
+                Card {
+                    background: Theme.card;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 6px;
+
+                        HorizontalLayout {
+                            Text { text: "Confidence"; color: Theme.text; font-size: 12px; }
+                            Text {
+                                text: "\{Math.round(root.conf * 100)}%";
+                                color: Theme.cyan;
+                                font-size: 13px;
+                                font-weight: 800;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        FancySlider {
+                            value <=> root.conf;
+                            changed(v) => { root.conf_changed(v); }
+                        }
+
+                        Rectangle { height: 6px; }
+
+                        HorizontalLayout {
+                            Text { text: "IoU (NMS)"; color: Theme.text; font-size: 12px; }
+                            Text {
+                                text: "\{Math.round(root.iou * 100)}%";
+                                color: Theme.pink;
+                                font-size: 13px;
+                                font-weight: 800;
+                                horizontal-alignment: right;
+                            }
+                        }
+                        FancySlider {
+                            value <=> root.iou;
+                            fill: Theme.warm;
+                            changed(v) => { root.iou_changed(v); }
+                        }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                Text {
+                    text: root.provider_text;
+                    color: Theme.dim;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                }
+            }
+
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                background: Theme.border;
+            }
+        }
+
+        // ===================== MAIN =====================
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            // header
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: root.mode == "image" ? "Image Detection"
+                            : root.mode == "video" ? "Video Detection"
+                            : root.mode == "webcam" ? "Webcam Detection"
+                            : "Folder Detection";
+                        color: Theme.text;
+                        font-size: 28px;
+                        font-weight: 800;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 340px;
+                        height: 36px;
+                        border-radius: 18px;
+                        background: Theme.panel;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        Text {
+                            x: 16px;
+                            width: parent.width - 32px;
+                            text: root.file_name == "" ? "No file selected" : root.file_name;
+                            color: root.file_name == "" ? Theme.red : Theme.green;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            // toolbar
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+
+                ActionButton {
+                    width: 160px;
+                    text: root.mode == "image" ? "Open Image"
+                        : root.mode == "video" ? "Open Video"
+                        : root.mode == "webcam" ? "Start Webcam"
+                        : "Open Folder";
+                    enabled: !root.busy;
+                    clicked => { root.primary_action(); }
+                }
+                if root.mode == "folder": ActionButton {
+                    width: 160px;
+                    text: "Shuffle 4";
+                    fill: Theme.warm;
+                    enabled: root.can_shuffle && !root.busy;
+                    clicked => { root.shuffle(); }
+                }
+                if root.mode == "webcam": ActionButton {
+                    width: 130px;
+                    text: "Swap Cam";
+                    fill: Theme.warm;
+                    enabled: root.can_swap;
+                    clicked => { root.swap_cam(); }
+                }
+                if root.mode == "video": ActionButton {
+                    width: 110px;
+                    text: root.paused ? "Play" : "Pause";
+                    fill: Theme.warm;
+                    enabled: root.busy;
+                    clicked => { root.toggle_pause(); }
+                }
+                if root.is_stream: ActionButton {
+                    width: 100px;
+                    text: "Stop";
+                    fill: Theme.danger;
+                    enabled: root.busy;
+                    clicked => { root.stop(); }
+                }
+                ActionButton {
+                    width: 100px;
+                    text: "Clear";
+                    fill: Theme.card-hi;
+                    clicked => { root.clear(); }
+                }
+                if root.mode == "webcam": ActionButton {
+                    width: 130px;
+                    text: "Capture";
+                    fill: Theme.go;
+                    enabled: root.busy;
+                    clicked => { root.capture(); }
+                }
+                if root.mode == "image" || root.mode == "folder": ActionButton {
+                    width: 140px;
+                    text: "Save Result";
+                    fill: Theme.go;
+                    enabled: root.can_save && !root.busy;
+                    clicked => { root.save_result(); }
+                }
+            }
+
+            // content
+            HorizontalLayout {
+                spacing: 14px;
+
+                // display
+                Card {
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+
+                        HorizontalLayout {
+                            Text { text: "Display"; color: Theme.accent; font-size: 13px; font-weight: 800; }
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: #06080f;
+                            border-radius: 10px;
+                            clip: true;
+
+                            if !root.has_image: VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
+                                Rectangle {
+                                    height: 72px;
+                                    Rectangle {
+                                        width: 72px;
+                                        height: 72px;
+                                        x: (parent.width - self.width) / 2;
+                                        border-radius: 20px;
+                                        background: Theme.brand;
+                                        Text {
+                                            text: "M";
+                                            color: #ffffff;
+                                            font-size: 40px;
+                                            font-weight: 800;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                Text {
+                                    text: "📟 Makers - YOLO Object Detection";
+                                    color: Theme.text;
+                                    font-size: 18px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: root.mode == "image" ? "Open an image to run detection"
+                                        : root.mode == "video" ? "Open a video file to start"
+                                        : root.mode == "webcam" ? "Start the webcam for live detection"
+                                        : "Open a folder - 4 random images will be analysed";
+                                    color: Theme.dim;
+                                    font-size: 13px;
+                                    horizontal-alignment: center;
+                                }
+                            }
+
+                            if root.has_image: Image {
+                                source: root.frame;
+                                width: parent.width;
+                                height: parent.height;
+                                image-fit: contain;
+                            }
+
+                            // FPS overlay (video / webcam)
+                            if root.show_fps: Rectangle {
+                                x: 14px;
+                                y: 14px;
+                                height: 32px;
+                                width: fps-row.preferred-width;
+                                border-radius: 16px;
+                                background: #000000b8;
+                                border-width: 1px;
+                                border-color: Theme.green;
+
+                                fps-row := HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 14px;
+                                    spacing: 8px;
+                                    Rectangle {
+                                        width: 10px;
+                                        Rectangle {
+                                            width: 8px;
+                                            height: 8px;
+                                            border-radius: 4px;
+                                            background: Theme.green;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                    }
+                                    Text {
+                                        text: root.fps_text;
+                                        color: #ffffff;
+                                        font-size: 13px;
+                                        font-weight: 800;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // indeterminate bar for image / folder jobs
+                            if root.busy && !root.is_stream: Rectangle {
+                                y: parent.height - 4px;
+                                height: 4px;
+                                width: parent.width;
+                                background: Theme.track;
+                                clip: true;
+                                Rectangle {
+                                    width: 140px;
+                                    height: parent.height;
+                                    background: Theme.brand;
+                                    x: -self.width + (parent.width + self.width) * Math.mod(animation-tick() / 1.4s, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // results
+                Card {
+                    width: 320px;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+
+                        Text { text: "Detection Results"; color: Theme.accent; font-size: 13px; font-weight: 800; }
+
+                        Rectangle {
+                            height: 104px;
+                            border-radius: 12px;
+                            background: Theme.card;
+                            border-width: 2px;
+                            border-color: Theme.accent;
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 2px;
+                                Text {
+                                    text: root.total;
+                                    color: Theme.cyan;
+                                    font-size: 44px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: root.total_caption;
+                                    color: Theme.dim;
+                                    font-size: 12px;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        SectionLabel { text: "CLASSES"; }
+
+                        if root.total == 0: Rectangle {
+                            vertical-stretch: 1;
+                            Text {
+                                text: root.results_hint;
+                                color: Theme.dim;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        if root.total > 0: ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 8px;
+                                for c in root.classes: ClassRow {
+                                    name: c.name;
+                                    count: c.count;
+                                    total: root.total;
+                                    tint: Theme.palette[c.cidx];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // status bar
+            Rectangle {
+                height: 38px;
+                border-radius: 10px;
+                background: Theme.panel;
+                border-width: 1px;
+                border-color: Theme.border;
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 10px;
+                    Rectangle {
+                        width: 10px;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            y: (parent.height - self.height) / 2;
+                            background: [Theme.accent, Theme.green, Theme.amber, Theme.red][root.status_kind];
+                        }
+                    }
+                    Text {
+                        text: root.status_text;
+                        color: Theme.text;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+}

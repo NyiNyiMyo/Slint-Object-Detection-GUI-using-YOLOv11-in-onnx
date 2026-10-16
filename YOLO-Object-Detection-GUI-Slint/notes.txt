@@ -1,0 +1,18 @@
+for windows,
+
+python -m venv venv
+.\venv\Scripts\activate
+pip install slint
+pip install numpy
+pip install opencv-python
+pip install onnxruntime-gpu
+
+python yolo_detection_slint.py
+
+python -m pip install pyinstaller
+python -m PyInstaller --onefile --windowed --collect-all slint --add-data "yolo_detection.slint;." --add-data "models;models" yolo_detection_slint.py
+
+for Linux,
+
+python3 -m pip install pyinstaller
+python -m PyInstaller --onefile --windowed --collect-all slint --add-data "yolo_detection.slint:." --add-data "models:models" yolo_detection_slint.py
